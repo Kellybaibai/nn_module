@@ -28,8 +28,13 @@ class Linear(nn.Module):
         self.weight = init_HE(self.in_features, self.out_features)
         if bias:
             self.bias = torch.Tensor(np.zeros(self.out_features))
-
-
+        else:
+            self.bias = None
+    def forward(self, X):
+        X_out = X @ self.weight  # the multiplication of matrix
+        if self.bias:
+            return X_out + self.bias.broadcast_to(X_out.shape)
+        return X_out
 
 
 
@@ -70,8 +75,13 @@ class Dropout(nn.Module):
         pass
 
 class Sequential(nn.Module):
-    def __init__(self):
-        pass
+    def __init__(self, *modules):
+        super.__init__()
+        self.modules = modules
+    def forward(self, X):
+        for module in self.modules:
+            X = module(X)
+        return X
 
 class Residual(nn.Module):
     def __init__(self):
