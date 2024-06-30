@@ -1,71 +1,83 @@
-# -*- coding: utf-8 -*-
-# @Time: 2024/6/22 14:51
-# @Author: Kellybai
-# @File: data_process.py
-# Have a nice day!
 
-import numpy as np
-import torch
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
-from torchvision import transforms, datasets
-from torch.utils.data import Dataset, DataLoader
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Subset
 
-np.random.seed(2024)
 
-class MyDataset:
-    def __int__(self, args):
-        self.data_name = args.dataset
-    def data_load(self):
-        transform = transforms.Compose([transforms.ToTensor()])
-        if self.data_name == 'iris':
-            dataset = load_iris(root='./data')
-            train_dataset, test_dataset = train_test_split(dataset, test_size=0.2, random_state=2024)
-        elif self.data_name == 'MNIST':
-            train_dataset = datasets.MNIST(root='./data', train=True, transform=transform, download=True)
-            test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
+class Dataset:
+    def __init__(self, dataset_name, root=None, train=True, transform=None, target_transform=None, download=True):
+        self.dataset_name = dataset_name
+        self.root = root
+        self.train = train
+        self.transform = transform
+        self.target_transform = target_transform
+        self.download = download
+        self.data = None
+        self.targets = None
+
+        if dataset_name == 'iris':
+            self.load_iris()
+        elif dataset_name == 'mnist':
+            self.load_mnist()
+        elif dataset_name == 'fashion-mnist':
+            self.load_fashion_mnist()
         else:
-            train_dataset = datasets.FashionMNIST(root='./data', train=True, download=True, transform=transform)
-            test_dataset = datasets.FashionMNIST(root='./data', train=False, download=True, transform=transform)
-        return train_dataset, test_dataset
+            raise ValueError(f"Unsupported dataset: {dataset_name}")
 
+    def load_iris(self):
+        iris = load_iris()
+        self.data = iris.data
+        self.targets = iris.target
 
-class MyDataLoader(DataLoader):
-    def __int__(self, args, dataset, shuffle=True):
-        self.dataset = dataset
-        self.batch_size = args.batch_size
-        self.shuffle = shuffle
-        self.len_data = len(dataset)
-        self.current_idx = 0
+    def load_mnist(self):
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ])
+        dataset = datasets.MNIST(root=self.root, train=self.train, transform=self.transform,
+                                 target_transform=self.target_transform, download=self.download)
+        self.data = dataset.data.numpy()
+        self.targets = dataset.targets.numpy()
 
-        if self.shuffle == True:
-            np.random.shuffle(self.dataset)
-
-    def __iter__(self):
-        '''
-        to make MyDataloader iterable
-        '''
-        return self
-
-    def __next__(self):
-        if self.current_idx >= self.len_data:
-            raise StopIteration
-
-        batch_data = self.dataset[self.current_idx : self.current_idx + self.batch_size]
-        self.current_idx += self.batch_size
-        batch_data = torch.Tensor(batch_data)
-        return batch_data
+    def load_fashion_mnist(self):
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,))
+        ])
+        dataset = datasets.FashionMNIST(root=self.root, train=self.train, transform=self.transform,
+                                        target_transform=self.target_transform, download=self.download)
+        self.data = dataset.data.numpy()
+        self.targets = dataset.targets.numpy()
 
     def __len__(self):
-        '''
-        to calculate the number of batches
-        '''
-        return self.len_data // self.batch_size + (1 if self.len_data % self.batch_size > 0 else 0)
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.targets[idx]
 
 
+class CustomDataLoader(DataLoader):
+    def __init__(self, dataset, batch_size=32, shuffle=True):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        super().__init__(dataset, batch_size=batch_size, shuffle=shuffle)
 
+    def split_train_test(self, test_size=0.2, random_state=42):
+        if len(self.dataset) == 0:
+            raise ValueError("Dataset is empty. Cannot split.")
 
+        data_size = len(self.dataset)
+        indices = list(range(data_size))
+        train_indices, test_indices = train_test_split(indices, test_size=test_size, random_state=random_state)
 
+        train_dataset = self._subset_dataset(train_indices)
+        test_dataset = self._subset_dataset(test_indices)
 
+        return train_dataset, test_dataset
 
+    def _subset_dataset(self, indices):
+        subset = Subset(self.dataset, indices)
+        return CustomDataLoader(subset, batch_size=self.batch_size, shuffle=self.shuffle)
 
